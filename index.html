@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>円の面積（方眼による測定）</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body {
+      background-color: #ffffff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      font-family: "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+      overflow: hidden;
+    }
+
+    /* 16:9 比率を維持するメインステージ */
+    .stage {
+      width: 100vw;
+      height: 56.25vw;
+      max-height: 100vh;
+      max-width: 177.78vh;
+      aspect-ratio: 16 / 9;
+      background-color: #ffffff;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+      border: 1px solid #e2e8f0;
+    }
+
+    #page1 {
+      position: absolute;
+      inset: 0;
+      background-color: #ffffff;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 10;
+      transition: transform 0.72s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.6s ease;
+    }
+
+    #page1.zoom-out {
+      transform: scale(2.2) translate(-23%, 23%);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .top-grid-container {
+      position: relative;
+      width: clamp(320px, 45vw, 540px);
+      height: clamp(320px, 45vw, 540px);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 12px;
+    }
+
+    /* 象限タップのホバー＆インタラクティブエフェクト */
+    .quadrant-clickable {
+      cursor: pointer;
+      transition: opacity 0.2s ease, filter 0.2s ease;
+    }
+    .quadrant-clickable:hover {
+      filter: brightness(0.96);
+    }
+
+    #page2 {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.48s ease;
+      z-index: 5;
+    }
+
+    #page2.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* 左側 52%：図形領域 */
+    .left-panel {
+      width: 52%;
+      height: 100%;
+      padding: 8px 8px 8px 44px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background-color: #f8fafc;
+      border-right: 2px solid #cbd5e1;
+      position: relative;
+    }
+
+    /* 1/4円インタラクティブ領域 */
+    .quarter-wrapper {
+      position: relative;
+      width: min(93vh, 45vw);
+      height: min(93vh, 45vw);
+    }
+
+    /* 方眼の1cm目盛りラベル */
+    .scale-mark-x {
+      position: absolute;
+      top: -22px;
+      left: 0;
+      width: 10%;
+      text-align: center;
+      font-size: clamp(12px, 1.3vw, 16px);
+      font-weight: bold;
+      color: #1e293b;
+      z-index: 3;
+    }
+
+    .scale-mark-y {
+      position: absolute;
+      top: 0;
+      left: -32px;
+      height: 10%;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      width: 28px;
+      font-size: clamp(12px, 1.3vw, 16px);
+      font-weight: bold;
+      color: #1e293b;
+      z-index: 3;
+    }
+
+    /* 円の内部水色・外部白色の背景層 */
+    .bg-layer {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #ffffff;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* 前景レイヤー (最前面の円周線) */
+    .fg-layer {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* 10x10 マス目グリッド */
+    .grid-10x10 {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      grid-template-rows: repeat(10, 1fr);
+      width: 100%;
+      height: 100%;
+      border-top: 2px solid #000000;
+      border-left: 2px solid #000000;
+      border-right: 1.5px solid #7bbccb;
+      border-bottom: 1.5px solid #7bbccb;
+      position: relative;
+      background-color: transparent;
+      touch-action: none;
+      z-index: 2;
+    }
+
+    .cell {
+      border-right: 1.5px solid #7bbccb;
+      border-bottom: 1.5px solid #7bbccb;
+      cursor: pointer;
+      background-color: transparent;
+      transition: background-color 0.08s ease;
+    }
+
+    .right-panel {
+      width: 48%;
+      height: 100%;
+      padding: 3.5% 4.5%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background-color: #ffffff;
+      font-size: clamp(13px, 1.55vw, 20px);
+      line-height: 1.7;
+      color: #1e293b;
+    }
+
+    .statement-container {
+      display: flex;
+      flex-direction: column;
+      gap: min(2.5vh, 20px);
+    }
+
+    .statement-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    /* カラーマーク */
+    .mark-box {
+      display: inline-block;
+      width: clamp(18px, 1.8vw, 24px);
+      height: clamp(18px, 1.8vw, 24px);
+      border: 1.5px solid #64748b;
+      vertical-align: middle;
+      border-radius: 4px;
+    }
+    .mark-orange { background-color: #FBE5C0; }
+    .mark-yellow { background-color: #FFF6ED; }
+
+    /* 穴埋め回答枠 */
+    .fill-box {
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      min-width: clamp(48px, 5.5vw, 70px);
+      height: clamp(30px, 3.5vw, 44px);
+      padding: 0 6px;
+      border: 2px solid #38bdf8;
+      border-radius: 8px;
+      background-color: #ffffff;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: clamp(15px, 1.7vw, 22px);
+      color: #dc2626;
+      transition: all 0.15s ease;
+    }
+
+    .fill-box:hover {
+      border-color: #0284c7;
+      background-color: #f0f9ff;
+    }
+
+    .fill-box.count-box {
+      cursor: default;
+      background-color: #ffffff;
+      border-color: #38bdf8;
+      color: #dc2626;
+    }
+
+    .hidden-text {
+      visibility: hidden;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+
+    .visible-text {
+      visibility: visible;
+      opacity: 1;
+    }
+
+    .fraction {
+      display: inline-flex;
+      flex-direction: column;
+      vertical-align: middle;
+      text-align: center;
+      font-size: 0.85em;
+      line-height: 1;
+      margin: 0 4px;
+    }
+    .fraction .top {
+      border-bottom: 1.5px solid #1e293b;
+      padding-bottom: 2px;
+    }
+    .fraction .bottom {
+      padding-top: 2px;
+    }
+
+    .underline-ans {
+      border-bottom: 2px solid #1e293b;
+      padding-bottom: 2px;
+      display: inline-block;
+    }
+
+    .bottom-control-bar {
+      display: flex;
+      justify-content: flex-end;
+      gap: clamp(6px, 1vw, 12px);
+      padding-top: 10px;
+      width: 100%;
+    }
+
+    .btn {
+      padding: clamp(6px, 1vh, 10px) clamp(8px, 1.1vw, 16px);
+      font-size: clamp(11px, 1.15vw, 15px);
+      font-weight: bold;
+      border: 2px solid #888;
+      border-radius: 8px;
+      background-color: #ffffff;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    .btn-top {
+      border-color: #6366f1;
+      color: #4338ca;
+      background-color: #eef2ff;
+    }
+    .btn-top:hover {
+      background-color: #e0e7ff;
+    }
+
+    .btn-reset {
+      border-color: #f97316;
+      color: #c2410c;
+      background-color: #fff7ed;
+    }
+    .btn-reset:hover {
+      background-color: #ffedd5;
+    }
+
+    .btn-finish {
+      border-color: #0284c7;
+      color: #0369a1;
+      background-color: #f0f9ff;
+    }
+    .btn-finish:hover {
+      background-color: #e0f2fe;
+    }
+
+    .btn-complete {
+      border-color: #16a34a;
+      color: #15803d;
+      background-color: #f0fdf4;
+    }
+    .btn-complete:hover {
+      background-color: #dcfce7;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="stage">
+
+    <!-- ==================== 1ページ目：トップ画面 ==================== -->
+    <div id="page1">
+      <div class="top-grid-container">
+        <svg width="100%" height="100%" viewBox="-12 -12 504 504" id="top-svg">
+          <defs>
+            <pattern id="grid20" width="24" height="24" patternUnits="userSpaceOnUse">
+              <path d="M 24 0 L 0 0 0 24" fill="none" stroke="#7bbccb" stroke-width="1.2"/>
+            </pattern>
+          </defs>
+
+          <!-- 全体背景（白） -->
+          <rect x="0" y="0" width="480" height="480" fill="#ffffff"/>
+
+          <!-- 初回表示用のデフォルト下地レイヤー -->
+          <g id="top-initial-bg">
+            <!-- 1/4扇形（右上）：デフォルト薄黄色 -->
+            <path d="M 240 240 L 240 0 A 240 240 0 0 1 480 240 Z" fill="#FFF6ED"/>
+            <!-- 他3象限：デフォルト薄橙色 -->
+            <path d="M 240 240 L 240 0 A 240 240 0 1 0 480 240 Z" fill="#FBE5C0"/>
+          </g>
+
+          <!-- 動的象限レイヤー (Q1:右上, Q2:左上, Q3:左下, Q4:右下) -->
+          <g id="top-quadrant-q1"></g>
+          <g id="top-quadrant-q2"></g>
+          <g id="top-quadrant-q3"></g>
+          <g id="top-quadrant-q4"></g>
+
+          <!-- 初回クリック用透明オーバーレイ -->
+          <rect id="initial-click-overlay" x="0" y="0" width="480" height="480" fill="transparent" style="cursor: pointer;" onclick="handleTopInitialClick()"/>
+
+          <!-- 2ページ目訪問後の象限タップ領域 (Q1:学習画面へ, Q2/Q3/Q4:トグル表示) -->
+          <g id="quadrant-click-overlays" style="display: none;">
+            <!-- 右上 (Q1) : 2ページ目（学習画面）へ復帰 -->
+            <rect x="240" y="0" width="240" height="240" fill="transparent" class="quadrant-clickable" onclick="goToPage2()"/>
+            
+            <!-- 左上 (Q2) : トグルスイッチ -->
+            <rect x="0" y="0" width="240" height="240" fill="transparent" class="quadrant-clickable" onclick="toggleQuadrant('q2')"/>
+            
+            <!-- 左下 (Q3) : トグルスイッチ -->
+            <rect x="0" y="240" width="240" height="240" fill="transparent" class="quadrant-clickable" onclick="toggleQuadrant('q3')"/>
+            
+            <!-- 右下 (Q4) : トグルスイッチ -->
+            <rect x="240" y="240" width="240" height="240" fill="transparent" class="quadrant-clickable" onclick="toggleQuadrant('q4')"/>
+          </g>
+
+          <!-- グリッド線オーバーレイ -->
+          <rect x="0" y="0" width="480" height="480" fill="url(#grid20)" stroke="#7bbccb" stroke-width="1.5" pointer-events="none"/>
+
+          <!-- 円周および中心の太い黒線 -->
+          <circle cx="240" cy="240" r="240" fill="none" stroke="#000000" stroke-width="3" pointer-events="none"/>
+          <line x1="240" y1="0" x2="240" y2="480" stroke="#000000" stroke-width="2.5" pointer-events="none"/>
+          <line x1="0" y1="240" x2="480" y2="240" stroke="#000000" stroke-width="2.5" pointer-events="none"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- ==================== 2ページ目：詳細学習画面 ==================== -->
+    <div id="page2">
+      <!-- 左側：図形領域 -->
+      <div class="left-panel">
+        <div class="quarter-wrapper">
+          <!-- 1cm 表記 -->
+          <div class="scale-mark-x">1cm</div>
+          <div class="scale-mark-y">1cm</div>
+
+          <!-- 円内部(水色)・外部(白色) 背景層 -->
+          <svg class="bg-layer" viewBox="0 0 380 380" preserveAspectRatio="none">
+            <path d="M 0 0 A 380 380 0 0 1 380 380 L 0 380 Z" fill="#ddf0ff"/>
+          </svg>
+
+          <!-- 10x10 マス目 -->
+          <div class="grid-10x10" id="grid10"></div>
+
+          <!-- 最上層：常に表示される円周線 -->
+          <svg class="fg-layer" viewBox="0 0 380 380" preserveAspectRatio="none">
+            <path d="M 0 0 A 380 380 0 0 1 380 380" fill="none" stroke="#000000" stroke-width="2"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- 右側：テキスト・穴埋め領域 -->
+      <div class="right-panel">
+        <div class="statement-container">
+          <div class="statement-row">
+            <span class="mark-box mark-orange"></span> の数は
+            <div class="fill-box count-box" id="count-orange">0</div> 個で、
+            <div class="fill-box toggle-box" onclick="toggleAnswer(this)">
+              <span class="hidden-text">69</span>
+            </div> cm²
+          </div>
+
+          <div class="statement-row">
+            <span class="mark-box mark-yellow"></span> を <span class="mark-box mark-orange"></span> の半分の面積と考えると、
+          </div>
+
+          <div class="statement-row">
+            <span class="mark-box mark-yellow"></span> の数は
+            <div class="fill-box count-box" id="count-yellow">0</div> 個で、
+            <div class="fill-box toggle-box" onclick="toggleAnswer(this)">
+              <span class="hidden-text">8.5</span>
+            </div> cm²
+          </div>
+
+          <div class="statement-row">
+            円の <div class="fraction"><span class="top">1</span><span class="bottom">4</span></div> の面積は、
+            <div class="fill-box toggle-box" onclick="toggleAnswer(this)">
+              <span class="hidden-text">77.5</span>
+            </div> cm²
+          </div>
+
+          <div class="statement-row">
+            円全体の面積は <div class="fill-box toggle-box" onclick="toggleAnswer(this)">
+              <span class="hidden-text">77.5</span>
+            </div> × 4 ＝
+            <div class="fill-box toggle-box" onclick="toggleAnswer(this)">
+              <span class="hidden-text">310</span>
+            </div>
+          </div>
+
+          <div class="statement-row" style="justify-content: flex-end;">
+            およそ
+            <span class="underline-ans">
+              <div class="fill-box toggle-box" onclick="toggleAnswer(this)">
+                <span class="hidden-text">310</span>
+              </div>
+            </span> cm²
+          </div>
+        </div>
+
+        <!-- 右下 操作ボタンエリア -->
+        <div class="bottom-control-bar">
+          <button class="btn btn-top" onclick="goToPage1()">全円</button>
+          <button class="btn btn-reset" onclick="resetAll()">↺ やり直し</button>
+          <button class="btn btn-finish" onclick="finishCounting()">数え終わり</button>
+          <button class="btn btn-complete" onclick="completeAll()">完成</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // マス目データ (10x10)
+    // Row 2, Col 6 (r=1, c=5) -> 'partial' (薄黄)
+    // Row 10, Col 8 (r=9, c=7) & Col 9 (r=9, c=8) -> 'full' (薄橙)
+    const gridLayout = [
+      ['partial','partial','partial','partial','partial','none','none','none','none','none'],             // Row 1
+      ['full','full','full','full','partial','partial','none','none','none','none'],                   // Row 2
+      ['full','full','full','full','full','full','partial','partial','none','none'],                    // Row 3
+      ['full','full','full','full','full','full','full','partial','none','none'],                    // Row 4
+      ['full','full','full','full','full','full','full','full','partial','none'],                    // Row 5
+      ['full','full','full','full','full','full','full','full','partial','partial'],                 // Row 6
+      ['full','full','full','full','full','full','full','full','full','partial'],                    // Row 7
+      ['full','full','full','full','full','full','full','full','full','partial'],                    // Row 8
+      ['full','full','full','full','full','full','full','full','full','partial'],                    // Row 9
+      ['full','full','full','full','full','full','full','full','full','partial']                     // Row 10
+    ];
+
+    const cellTypes = [];
+    for (let r = 0; r < 10; r++) {
+      for (let c = 0; c < 10; c++) {
+        cellTypes.push(gridLayout[r][c]);
+      }
+    }
+
+    const cellStates = Array(100).fill(false);
+
+    const COLOR_ORANGE = '#FBE5C0';
+    const COLOR_YELLOW = '#FFF6ED';
+    const COLOR_WATER  = '#ddf0ff';
+    const COLOR_WHITE  = '#ffffff';
+
+    // 2ページ目を一度でも訪れたか
+    let hasVisitedPage2 = false;
+
+    // トップページの象限トグル状態
+    const activeQuadrants = {
+      q1: true,  // 右上（常にアクティブ）
+      q2: false, // 左上
+      q3: false, // 左下
+      q4: false  // 右下
+    };
+
+    const grid10 = document.getElementById('grid10');
+    let isDragging = false;
+    let dragMode = true;
+
+    // 2ページ目 マス目要素の動的生成
+    cellTypes.forEach((type, index) => {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.index = index;
+      grid10.appendChild(cell);
+    });
+
+    function getCellIndexFromPoint(x, y) {
+      const rect = grid10.getBoundingClientRect();
+      if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return -1;
+      const col = Math.floor((x - rect.left) / (rect.width / 10));
+      const row = Math.floor((y - rect.top) / (rect.height / 10));
+      if (col >= 0 && col < 10 && row >= 0 && row < 10) {
+        return row * 10 + col;
+      }
+      return -1;
+    }
+
+    function handleStart(x, y) {
+      const idx = getCellIndexFromPoint(x, y);
+      if (idx !== -1 && cellTypes[idx] !== 'none') {
+        isDragging = true;
+        dragMode = !cellStates[idx];
+        cellStates[idx] = dragMode;
+        updateGridUI();
+      }
+    }
+
+    function handleMove(x, y) {
+      if (!isDragging) return;
+      const idx = getCellIndexFromPoint(x, y);
+      if (idx !== -1 && cellTypes[idx] !== 'none') {
+        if (cellStates[idx] !== dragMode) {
+          cellStates[idx] = dragMode;
+          updateGridUI();
+        }
+      }
+    }
+
+    function handleEnd() {
+      isDragging = false;
+    }
+
+    grid10.addEventListener('mousedown', (e) => handleStart(e.clientX, e.clientY));
+    window.addEventListener('mousemove', (e) => handleMove(e.clientX, e.clientY));
+    window.addEventListener('mouseup', handleEnd);
+
+    grid10.addEventListener('touchstart', (e) => {
+      if (e.touches.length > 0) {
+        e.preventDefault();
+        const t = e.touches[0];
+        handleStart(t.clientX, t.clientY);
+      }
+    }, { passive: false });
+
+    window.addEventListener('touchmove', (e) => {
+      if (isDragging && e.touches.length > 0) {
+        e.preventDefault();
+        const t = e.touches[0];
+        handleMove(t.clientX, t.clientY);
+      }
+    }, { passive: false });
+
+    window.addEventListener('touchend', handleEnd);
+
+    // 2ページ目のマス目描画＆カウント更新
+    function updateGridUI() {
+      const cells = grid10.children;
+      let orangeCount = 0;
+      let yellowCount = 0;
+
+      cellStates.forEach((selected, i) => {
+        const cell = cells[i];
+        const type = cellTypes[i];
+
+        if (selected) {
+          if (type === 'full') {
+            cell.style.backgroundColor = COLOR_ORANGE;
+            orangeCount++;
+          } else if (type === 'partial') {
+            cell.style.backgroundColor = COLOR_YELLOW;
+            yellowCount++;
+          }
+        } else {
+          cell.style.backgroundColor = 'transparent';
+        }
+      });
+
+      document.getElementById('count-orange').textContent = orangeCount;
+      document.getElementById('count-yellow').textContent = yellowCount;
+
+      // トップページの描画もリアルタイム更新
+      updateTopPageSVG();
+    }
+
+    // 1ページ目 (トップページ) SVG描画の全面更新
+    function updateTopPageSVG() {
+      if (!hasVisitedPage2) return;
+
+      renderQuadrant('top-quadrant-q1', 'q1');
+      renderQuadrant('top-quadrant-q2', 'q2');
+      renderQuadrant('top-quadrant-q3', 'q3');
+      renderQuadrant('top-quadrant-q4', 'q4');
+    }
+
+    // 象限ごとの動的SVG描画（トグル状態＋円内アーチ水色パスの生成）
+    function renderQuadrant(groupId, key) {
+      const container = document.getElementById(groupId);
+      if (!container) return;
+      container.innerHTML = '';
+
+      const isON = activeQuadrants[key];
+
+      // 象限ごとのパス定義パラメータ
+      // 中心 (240, 240), 半径 240
+      let dPath = '';
+      if (key === 'q1') dPath = 'M 240 240 L 240 0 A 240 240 0 0 1 480 240 Z'; // 右上
+      if (key === 'q2') dPath = 'M 240 240 L 240 0 A 240 240 0 0 0 0 240 Z';   // 左上
+      if (key === 'q3') dPath = 'M 240 240 L 0 240 A 240 240 0 0 0 240 480 Z'; // 左下
+      if (key === 'q4') dPath = 'M 240 240 L 480 240 A 240 240 0 0 1 240 480 Z'; // 右下
+
+      // 1. 背景パス（扇形）の描画
+      const bgPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      bgPath.setAttribute('d', dPath);
+
+      if (isON) {
+        // ON状態：2ページ目と同様に「円の内部のみ綺麗なアーチ状の水色 (#ddf0ff)」
+        bgPath.setAttribute('fill', COLOR_WATER);
+        container.appendChild(bgPath);
+
+        // 2. 着色されたマス目のみをSVG rectとして追加描画
+        for (let r = 0; r < 10; r++) {
+          for (let c = 0; c < 10; c++) {
+            const idx = r * 10 + c;
+            if (!cellStates[idx]) continue; // 未着色マスは描画せず、背景の水色パスを透けさせる
+
+            const type = cellTypes[idx];
+            const fillColor = (type === 'full') ? COLOR_ORANGE : COLOR_YELLOW;
+
+            // 象限に応じた対称座標計算
+            let x, y;
+            if (key === 'q1') {
+              x = 240 + c * 24;
+              y = r * 24;
+            } else if (key === 'q2') {
+              x = 240 - (c + 1) * 24;
+              y = r * 24;
+            } else if (key === 'q3') {
+              x = 240 - (c + 1) * 24;
+              y = 240 + (9 - r) * 24;
+            } else if (key === 'q4') {
+              x = 240 + c * 24;
+              y = 240 + (9 - r) * 24;
+            }
+
+            createSVGRect(container, x, y, 24, 24, fillColor);
+          }
+        }
+      } else {
+        // OFF状態：円の内側を白色 (#ffffff) に設定
+        bgPath.setAttribute('fill', COLOR_WHITE);
+        container.appendChild(bgPath);
+      }
+    }
+
+    function createSVGRect(parent, x, y, width, height, fill) {
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('x', x);
+      rect.setAttribute('y', y);
+      rect.setAttribute('width', width);
+      rect.setAttribute('height', height);
+      rect.setAttribute('fill', fill);
+      parent.appendChild(rect);
+    }
+
+    // 初回トップ画面クリック時の遷移
+    function handleTopInitialClick() {
+      goToPage2();
+    }
+
+    // 1ページ目 -> 2ページ目（学習画面）への遷移
+    function goToPage2() {
+      hasVisitedPage2 = true;
+
+      document.getElementById('top-initial-bg').style.display = 'none';
+      document.getElementById('initial-click-overlay').style.display = 'none';
+      document.getElementById('quadrant-click-overlays').style.display = 'block';
+
+      updateTopPageSVG();
+
+      const p1 = document.getElementById('page1');
+      const p2 = document.getElementById('page2');
+      p1.classList.add('zoom-out');
+      setTimeout(() => {
+        p2.classList.add('active');
+      }, 300);
+    }
+
+    // 2ページ目 -> 1ページ目（全円）への戻り遷移
+    function goToPage1() {
+      updateTopPageSVG();
+
+      const p1 = document.getElementById('page1');
+      const p2 = document.getElementById('page2');
+      p2.classList.remove('active');
+      setTimeout(() => {
+        p1.classList.remove('zoom-out');
+      }, 100);
+    }
+
+    // 左上(Q2)、左下(Q3)、右下(Q4)のトグルスイッチ処理
+    function toggleQuadrant(key) {
+      activeQuadrants[key] = !activeQuadrants[key];
+      updateTopPageSVG();
+    }
+
+    // 穴埋め枠のトグル表示
+    function toggleAnswer(el) {
+      const textSpan = el.querySelector('span');
+      if (textSpan) {
+        if (textSpan.classList.contains('hidden-text')) {
+          textSpan.classList.remove('hidden-text');
+          textSpan.classList.add('visible-text');
+        } else {
+          textSpan.classList.remove('visible-text');
+          textSpan.classList.add('hidden-text');
+        }
+      }
+    }
+
+    // やり直し（リセット）
+    function resetAll() {
+      cellStates.fill(false);
+      updateGridUI();
+
+      const answers = document.querySelectorAll('.toggle-box span');
+      answers.forEach(span => {
+        span.classList.remove('visible-text');
+        span.classList.add('hidden-text');
+      });
+    }
+
+    // 数え終わり（全対象マス着色）
+    function finishCounting() {
+      cellTypes.forEach((type, i) => {
+        if (type === 'full' || type === 'partial') {
+          cellStates[i] = true;
+        }
+      });
+      updateGridUI();
+    }
+
+    // 完成（数え終わり＋式・解答全表示）
+    function completeAll() {
+      finishCounting();
+      const answers = document.querySelectorAll('.toggle-box span');
+      answers.forEach(span => {
+        span.classList.remove('hidden-text');
+        span.classList.add('visible-text');
+      });
+    }
+  </script>
+</body>
+</html>
